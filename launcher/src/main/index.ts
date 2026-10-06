@@ -9,6 +9,8 @@ import { installForge } from './game/forge';
 import { installPreinstalledMods } from './game/mods';
 import * as modrinth from './modrinth';
 import { launchGame, killGame, isRunning, setProcessStarter, gameExit, GameCommand } from './game/launch';
+import { startDeviceCode, pollDeviceCode, identityFromMsToken } from './auth/chain';
+import { saveAccount, listAccounts, switchActive } from './auth/store';
 
 let win: BrowserWindow | null = null;
 
@@ -53,6 +55,24 @@ function wireIpc(): void {
     const acc = await msauth.loginInteractive();
     send('state:changed', null);
     return { profileName: acc.profileName, profileId: acc.profileId };
+  });
+
+  /** Device-code login (PCL2-style): returns the code to show, polls in background. */
+  ipcMain.handle('auth:deviceStart', async () => {
+    const dc = await startDeviceCode();
+    const url = 'https://www.microsoft.com/link'; // bare page — user pastes the code
+    (async () => {
+      try {
+        const tokens = await pollDeviceCode(dc);
+        const account = await identityFromMsToken(tokens.accessToken, tokens.refreshToken);
+        saveAccount(account);
+        send('auth:deviceDone', { ok: true, profileName: account.profileName });
+        send('state:changed', null);
+      } catch (err) {
+        send('auth:deviceDone', { ok: false, message: err instanceof Error ? err.message : String(err) });
+      }
+    })();
+    return { userCode: dc.userCode, url };
   });
 
   ipcMain.handle('auth:logout', () => {
@@ -118,6 +138,15 @@ function wireIpc(): void {
   });
 
   ipcMain.handle('mods:list', () => modrinth.listInstalled());
+
+  ipcMain.handle('accounts:list', () => {
+    try { return listAccounts(); } catch { return []; }
+  });
+  ipcMain.handle('accounts:switch', (_e, profileId: string) => {
+    const ok = switchActive(profileId);
+    send('state:changed', null);
+    return { ok };
+  });
 }
 
 /**

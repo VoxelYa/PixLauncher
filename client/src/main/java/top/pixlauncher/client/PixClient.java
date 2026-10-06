@@ -50,6 +50,16 @@ public final class PixClient {
         ModuleManager.init();
         hud.start();
 
+        // starter defaults: the everyday PvP HUD, on out of the box
+        for (String id : new String[] {
+            "fpsdisplay", "cpsdisplay", "keystrokes", "pingdisplay",
+            "coordsdisplay", "combodisplay", "armordisplay", "potiondisplay",
+            "sprint", "togglesneak", "modslist", "crosshair", "fullbright"
+        }) {
+            Module m = ModuleManager.byId(id);
+            if (m != null) m.setEnabled(true);
+        }
+
         ConfigManager.load(ConfigManager.activeProfile());
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> ConfigManager.save()));

@@ -13,6 +13,10 @@ import { loadAccount, saveAccount, clearAccount, ensureFreshToken, McAccount } f
 export async function loginInteractive(): Promise<McAccount> {
   const { verifier, challenge, state } = await import('./chain').then((m) => m.pkcePair());
 
+  // The token request must repeat the exact redirect_uri used at authorize,
+  // so capture the real port when the loopback server starts (never re-parse
+  // it from the callback URL — a root-path callback loses the port).
+  let redirectUri = '';
   const callbackUrl = await new Promise<string>((resolve, reject) => {
     const server = http.createServer((req, res) => {
       try {
@@ -38,7 +42,7 @@ export async function loginInteractive(): Promise<McAccount> {
     server.on('error', reject);
     server.listen(0, '127.0.0.1', () => {
       const port = (server.address() as { port: number }).port;
-      const redirectUri = `http://localhost:${port}/`;
+      redirectUri = `http://localhost:${port}/`;
       const url = buildAuthorizeUrl(redirectUri, verifier, state);
       shell.openExternal(url);
       // keep the URL reachable for troubleshooting
@@ -50,8 +54,6 @@ export async function loginInteractive(): Promise<McAccount> {
   if (params.searchParams.get('state') !== state) throw new Error('OAuth state mismatch');
   const code = params.searchParams.get('code');
   if (!code) throw new Error(`OAuth denied: ${params.searchParams.get('error_description') ?? 'no code'}`);
-  const port = params.port;
-  const redirectUri = `http://localhost:${port}/`;
 
   const tokens = await exchangeCode(code, redirectUri, verifier);
   const account = await identityFromMsToken(tokens.accessToken, tokens.refreshToken);

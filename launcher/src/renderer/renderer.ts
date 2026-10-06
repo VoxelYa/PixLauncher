@@ -29,12 +29,61 @@ function refresh(state: StateResponse): void {
   ($('mirror-select') as HTMLSelectElement).value = state.settings.mirrorPreference;
 }
 
+let accountsCache: { profileId: string; profileName: string; active: boolean }[] = [];
+
 async function pullState(): Promise<void> {
   refresh((await window.pix.getState()) as StateResponse);
+  try {
+    accountsCache = await window.pix.accountsList();
+    renderAccountChip();
+  } catch { /* list is cosmetic */ }
+}
+
+function renderAccountChip(): void {
+  const active = accountsCache.find((a) => a.active) ?? null;
+  const any = accountsCache.length > 0;
+  const chip = document.getElementById('account-chip');
+  if (chip) {
+    const name = document.getElementById('account-name');
+    if (name) name.textContent = any ? ((active ? active.profileName : accountsCache[0].profileName)) : 'Not signed in';
+  }
+}
+
+function renderAccountMenu(): void {
+  const menu = document.getElementById('account-menu');
+  if (!menu) return;
+  menu.innerHTML = '';
+  for (const a of accountsCache) {
+    const row = document.createElement('button');
+    row.className = 'account-item' + (a.active ? ' active' : '');
+    row.textContent = (a.active ? '\u2713 ' : '') + a.profileName;
+    row.addEventListener('click', async () => {
+      menu.classList.add('hidden');
+      if (!a.active) {
+        await window.pix.accountsSwitch(a.profileId);
+        await pullState();
+      }
+    });
+    menu.appendChild(row);
+  }
+  const add = document.createElement('button');
+  add.className = 'account-item add';
+  add.textContent = '+ Add account';
+  add.addEventListener('click', () => {
+    menu.classList.add('hidden');
+    document.getElementById('nav-home')?.click();
+    startDeviceLogin();
+  });
+  menu.appendChild(add);
 }
 
 updateSetupUi('idle');
 void pullState();
+
+document.getElementById('account-chip')?.addEventListener('click', () => {
+  renderAccountMenu();
+  document.getElementById('account-menu')?.classList.toggle('hidden');
+});
 
 function updateSetupUi(state: 'idle' | 'running' | 'done' | 'error'): void {
   const pill = $('setup-pill');
@@ -63,7 +112,50 @@ window.pix.onSetupError((p) => {
 });
 window.pix.onStateChanged(() => void pullState());
 
-$('btn-login').addEventListener('click', () => void window.pix.login());
+window.pix.onDeviceDone((p) => {
+  document.getElementById('device-info')?.remove();
+  (document.getElementById('btn-login') as HTMLButtonElement).disabled = false;
+  if (p.ok) $('setup-log').textContent = 'Signed in as ' + (p.profileName ?? '');
+  else $('setup-log').textContent = 'Device login failed: ' + (p.message ?? '');
+});
+
+async function startDeviceLogin(): Promise<void> {
+  (document.getElementById('btn-login') as HTMLButtonElement).disabled = true;
+  try {
+    const d = await window.pix.deviceStart();
+    const box = document.getElementById('login-card')!;
+    document.getElementById('device-info')?.remove();
+    const info = document.createElement('div');
+    info.id = 'device-info';
+    info.style.marginTop = '12px';
+    const loginUrl = 'https://www.microsoft.com/link';
+    let copied = false;
+    try { await navigator.clipboard.writeText(d.userCode); copied = true; } catch { /* fallback: Copy button */ }
+    info.innerHTML =
+      '<div style="font-size:13px;line-height:1.6">Open the login page, sign in with your Microsoft account, ' +
+      'and paste your code when asked.</div>' +
+      '<div class="row" style="align-items:center;margin-top:10px">' +
+      '<span style="font-size:22px;font-weight:700;letter-spacing:2px;color:var(--text)">' + d.userCode + '</span>' +
+      '<button class="btn" id="copy-code" style="padding:6px 14px">' + (copied ? 'Copied \u2713' : 'Copy code') + '</button>' +
+      '<button class="btn primary" id="open-page" style="padding:6px 14px">Open login page</button>' +
+      '</div>';
+    box.appendChild(info);
+    (info.querySelector('#copy-code') as HTMLButtonElement).addEventListener('click', async (ev) => {
+      const b = ev.currentTarget as HTMLButtonElement;
+      try { await navigator.clipboard.writeText(d.userCode); b.textContent = 'Copied \u2713'; } catch { /* noop */ }
+      setTimeout(() => { b.textContent = 'Copy code'; }, 2000);
+    });
+    (info.querySelector('#open-page') as HTMLButtonElement).addEventListener('click', () => {
+      window.open(loginUrl, '_blank');
+    });
+  } catch (err) {
+    $('setup-log').textContent = 'Device login error: ' + (err instanceof Error ? err.message : String(err));
+    (document.getElementById('btn-login') as HTMLButtonElement).disabled = false;
+  }
+}
+
+document.getElementById('btn-login')?.addEventListener('click', () => startDeviceLogin());
+
 $('btn-logout').addEventListener('click', () => void window.pix.logout());
 
 $('btn-setup').addEventListener('click', () => {

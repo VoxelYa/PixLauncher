@@ -3,11 +3,16 @@ import { contextBridge, ipcRenderer } from 'electron';
 const api = {
   getState: () => ipcRenderer.invoke('state:get'),
   login: () => ipcRenderer.invoke('auth:login'),
+  deviceStart: () => ipcRenderer.invoke('auth:deviceStart'),
+  onDeviceDone: (cb: (p: { ok: boolean; profileName?: string; message?: string }) => void) =>
+    ipcRenderer.on('auth:deviceDone', (_e, p) => cb(p)),
   logout: () => ipcRenderer.invoke('auth:logout'),
   setSettings: (patch: Record<string, unknown>) => ipcRenderer.invoke('settings:set', patch),
   runSetup: () => ipcRenderer.invoke('setup:run'),
   launchGame: () => ipcRenderer.invoke('game:launch'),
   killGame: () => ipcRenderer.invoke('game:kill'),
+  accountsList: () => ipcRenderer.invoke('accounts:list'),
+  accountsSwitch: (profileId: string) => ipcRenderer.invoke('accounts:switch', profileId),
   modsSearch: (query: string) => ipcRenderer.invoke('mods:search', query),
   modsInstall: (projectId: string) => ipcRenderer.invoke('mods:install', projectId),
   modsList: () => ipcRenderer.invoke('mods:list'),

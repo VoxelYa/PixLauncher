@@ -12,7 +12,9 @@ import { assertPublicHttps, USER_AGENT } from '../net';
  * gates login_with_xbox behind an AppID review (weekly); our own ID works
  * once approved. Never ship a borrowed ID.
  */
-export const CLIENT_ID = process.env.PIXLAUNCHER_CLIENT_ID ?? '438f4856-2266-4861-b2b9-da5fe4c35fde';
+// PLACEHOLDER — replace with your own Azure app's Client ID (Mojang AppID
+// Review approved). Local testing can override via PIXLAUNCHER_CLIENT_ID.
+export const CLIENT_ID = process.env.PIXLAUNCHER_CLIENT_ID ?? 'YOUR-MICROSOFT-CLIENT-ID';
 export const TENANT = process.env.PIXLAUNCHER_TENANT ?? 'consumers'; // personal Microsoft accounts (game accounts)
 export const SCOPES = 'offline_access XboxLive.signin';
 export const AUTHORIZE = `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/authorize`;
@@ -27,10 +29,19 @@ const MC_PROFILE = 'https://api.minecraftservices.com/minecraft/profile';
 /** The only hosts the auth chain may ever talk to (pinned, no user input). */
 const ALLOWED_AUTH_HOSTS = new Set([
   'login.microsoftonline.com',
+  'login.live.com',
   'user.auth.xboxlive.com',
   'xsts.auth.xboxlive.com',
   'api.minecraftservices.com'
 ]);
+
+// ------------------------------------------------------- Live SDK flow
+// The classic login.live.com flow used by the official 1.8.9-era launchers.
+// `oauth20_desktop.srf` is auto-registered for every Live SDK application.
+const LIVE_CLIENT_ID = '00000000402b5328';
+const LIVE_AUTHORIZE = 'https://login.live.com/oauth20_authorize.srf';
+const LIVE_TOKEN = 'https://login.live.com/oauth20_token.srf';
+const LIVE_REDIRECT = 'https://login.live.com/oauth20_desktop.srf';
 
 function assertAuthHost(url: string): URL {
   const u = assertPublicHttps(url);
@@ -46,6 +57,8 @@ export interface McIdentity {
   refreshToken: string;
   profileId: string;
   profileName: string;
+  /** which token endpoint issued the refresh token (drives refresh path) */
+  authProvider?: 'live' | 'ms';
 }
 
 export function b64url(buf: Buffer): string {
@@ -181,6 +194,52 @@ export async function xboxToMcChain(msAccessToken: string): Promise<Omit<McIdent
     profileId: profile.id as string,
     profileName: profile.name as string
   };
+}
+
+// ------------------------------------------------------- Live SDK flow
+/** Browser URL for the classic Live desktop flow (user pastes back the final
+ *  oauth20_desktop.srf URL, which contains ?code=...). */
+export function buildLiveAuthorizeUrl(): string {
+  return (
+    `${LIVE_AUTHORIZE}?client_id=${LIVE_CLIENT_ID}` +
+    `&response_type=code&redirect_uri=${encodeURIComponent(LIVE_REDIRECT)}` +
+    `&scope=${encodeURIComponent('XboxLive.signin offline_access')}` +
+    `&cobrandid=8058f65d-ce06-4c30-9559-473c9275a65d&prompt=select_account`
+  );
+}
+
+export async function exchangeLiveCode(code: string): Promise<{ accessToken: string; refreshToken: string }> {
+  assertAuthHost(LIVE_TOKEN);
+  const res = await fetch(LIVE_TOKEN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
+    body: new URLSearchParams({
+      client_id: LIVE_CLIENT_ID,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: LIVE_REDIRECT
+    }).toString()
+  });
+  const json = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) throw new Error(`live token ${res.status}: ${JSON.stringify(json)}`);
+  return { accessToken: json.access_token as string, refreshToken: json.refresh_token as string };
+}
+
+export async function refreshLiveTokens(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+  assertAuthHost(LIVE_TOKEN);
+  const res = await fetch(LIVE_TOKEN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
+    body: new URLSearchParams({
+      client_id: LIVE_CLIENT_ID,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+      redirect_uri: LIVE_REDIRECT
+    }).toString()
+  });
+  const json = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) throw new Error(`live refresh ${res.status}: ${JSON.stringify(json)}`);
+  return { accessToken: json.access_token as string, refreshToken: json.refresh_token as string };
 }
 
 /** Full chain from a fresh MS access token (after authorize or refresh). */

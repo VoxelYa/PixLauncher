@@ -40,7 +40,8 @@ function masterKey(): Buffer {
     fs.writeFileSync(file, salt);
   }
   // hkdfSync derives the two layer keys from one master secret
-  const master = crypto.scryptSync(machineProfile(), salt, 64, { N: KDF_N, r: 8, p: 1 });
+  // N=2^17 needs ~134MB; Node's default maxmem is 32MB — raise it explicitly.
+  const master = crypto.scryptSync(machineProfile(), salt, 64, { N: KDF_N, r: 8, p: 1, maxmem: 192 * 1024 * 1024 });
   return master;
 }
 
@@ -51,37 +52,73 @@ function keys(): { k1: Buffer; k2: Buffer } {
   return { k1: cachedMaster.subarray(0, 32), k2: cachedMaster.subarray(32, 64) };
 }
 
+/** AEAD factory: prefers ChaCha20-Poly1305, falls back to AES-256-GCM when
+ *  the runtime's crypto build lacks it (e.g. some Electron/BoringSSL builds). */
+type AeadAlgo = 'chacha20-poly1305' | 'aes-256-gcm';
+
+function aeadEnc(algo: AeadAlgo, key: Buffer, iv: Buffer) {
+  return crypto.createCipheriv(algo as crypto.CipherGCMTypes, key, iv, { authTagLength: 16 });
+}
+
+function aeadDec(algo: AeadAlgo, key: Buffer, iv: Buffer) {
+  return crypto.createDecipheriv(algo as crypto.CipherGCMTypes, key, iv, { authTagLength: 16 });
+}
+
+let aeadProbeDone = false;
+let innerChachaOk = true;
+function probeAead(): void {
+  try {
+    const iv = Buffer.alloc(12);
+    const c = crypto.createCipheriv('chacha20-poly1305', Buffer.alloc(32), iv, { authTagLength: 16 });
+    c.update(Buffer.alloc(8)); c.final();
+  } catch {
+    innerChachaOk = false;
+  }
+  aeadProbeDone = true;
+}
+
 export function encrypt(plaintext: Buffer): Buffer {
   const { k1, k2 } = keys();
+  probeAead();
+  const innerAlgo: AeadAlgo = innerChachaOk ? 'chacha20-poly1305' : 'aes-256-gcm';
   const iv2 = crypto.randomBytes(12);
-  const c2 = crypto.createCipheriv('chacha20-poly1305', k2, iv2, { authTagLength: 16 });
+  const c2 = aeadEnc(innerAlgo, k2, iv2);
   const layer2 = Buffer.concat([c2.update(plaintext), c2.final()]);
   const tag2 = c2.getAuthTag();
 
   const iv1 = crypto.randomBytes(12);
-  const c1 = crypto.createCipheriv('aes-256-gcm', k1, iv1, { authTagLength: 16 });
+  const c1 = aeadEnc('aes-256-gcm', k1, iv1);
   const layer1 = Buffer.concat([c1.update(layer2), c1.final()]);
   const tag1 = c1.getAuthTag();
 
-  return Buffer.concat([MAGIC, iv1, tag1, iv2, tag2, layer1]);
+  // header: MAGIC + inner-algo byte + iv1 + tag1 + iv2 + tag2 + ciphertext
+  const algoByte = Buffer.of(innerChachaOk ? 1 : 0);
+  return Buffer.concat([MAGIC, algoByte, iv1, tag1, iv2, tag2, layer1]);
 }
 
 export function decrypt(blob: Buffer): Buffer | null {
+  // current format (with algo byte) first, then legacy (headless-written, chacha inner)
+  return decryptInner(blob, true) ?? decryptInner(blob, false);
+}
+
+function decryptInner(blob: Buffer, withAlgoByte: boolean): Buffer | null {
   try {
-    if (blob.length < 4 + 12 + 16 + 12 + 16 || !blob.subarray(0, 4).equals(MAGIC)) return null;
+    const overhead = 4 + (withAlgoByte ? 1 : 0) + 12 + 16 + 12 + 16;
+    if (blob.length < overhead || !blob.subarray(0, 4).equals(MAGIC)) return null;
     const { k1, k2 } = keys();
-    let off = 4;
+    const innerAlgo = withAlgoByte ? (blob[4] === 1 ? 'chacha20-poly1305' : 'aes-256-gcm') : 'chacha20-poly1305';
+    let off = 4 + (withAlgoByte ? 1 : 0);
     const iv1 = blob.subarray(off, off + 12); off += 12;
     const tag1 = blob.subarray(off, off + 16); off += 16;
     const iv2 = blob.subarray(off, off + 12); off += 12;
     const tag2 = blob.subarray(off, off + 16); off += 16;
     const layer1 = blob.subarray(off);
 
-    const d1 = crypto.createDecipheriv('aes-256-gcm', k1, iv1, { authTagLength: 16 });
+    const d1 = aeadDec('aes-256-gcm', k1, iv1);
     d1.setAuthTag(tag1);
     const layer2 = Buffer.concat([d1.update(layer1), d1.final()]);
 
-    const d2 = crypto.createDecipheriv('chacha20-poly1305', k2, iv2, { authTagLength: 16 });
+    const d2 = aeadDec(innerAlgo as AeadAlgo, k2, iv2);
     d2.setAuthTag(tag2);
     return Buffer.concat([d2.update(layer2), d2.final()]);
   } catch (err) {
