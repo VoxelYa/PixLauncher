@@ -1,0 +1,19 @@
+node_modules/
+dist/
+release/
+build/
+*.log
+*.pixpart
+.mimosa/
+
+# launcher runtime data (JRE, game files, accounts, reports)
+launcher/pixlauncher/
+launcher/.minecraft/
+.minecraft/
+
+# client dev/build artifacts (jars are reproducible via compile-dev.sh/pack.sh)
+client/build/
+client/devlibs/
+
+# debug outputs
+pixcull.debug

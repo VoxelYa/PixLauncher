@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'" />
+  <title>PixLauncher</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">P</div>
+      <div class="brand-name">PixLauncher</div>
+    </div>
+    <nav>
+      <button class="nav-btn active" id="nav-home">Play</button>
+      <button class="nav-btn" id="nav-mods">Mods</button>
+      <button class="nav-btn" id="nav-settings">Settings</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div id="account-chip" class="account-chip">Not signed in</div>
+    </div>
+  </aside>
+
+  <main class="content">
+    <section id="view-home" class="view">
+      <div class="hero">
+        <h1>Minecraft 1.8.9 <span class="accent">Forge PvP</span></h1>
+        <p id="hero-sub">OptiFine &amp; Replay Mod preinstalled. Optimized, always.</p>
+      </div>
+
+      <div class="card" id="login-card">
+        <div class="card-head">
+          <h2>Microsoft Account</h2>
+          <span class="pill" id="login-pill">Required</span>
+        </div>
+        <p class="muted">Sign in with your Microsoft account to play. Only Microsoft login is supported.</p>
+        <div class="row">
+          <button class="btn primary" id="btn-login">Sign in with Microsoft</button>
+          <button class="btn ghost hidden" id="btn-logout">Sign out</button>
+        </div>
+      </div>
+
+      <div class="card" id="setup-card">
+        <div class="card-head">
+          <h2>Game Files</h2>
+          <span class="pill" id="setup-pill">Not downloaded</span>
+        </div>
+        <p class="muted">Vanilla 1.8.9, Forge, OptiFine and Replay Mod are fetched from the fastest source (official &amp; mirror auto speed-test).</p>
+        <div class="progress hidden" id="setup-progress"><div class="bar" id="setup-bar"></div></div>
+        <div class="logline" id="setup-log">Waiting…</div>
+        <div class="row">
+          <button class="btn primary" id="btn-setup" disabled>Download game files</button>
+        </div>
+      </div>
+
+      <div class="card" id="play-card">
+        <div class="card-head">
+          <h2>Launch</h2>
+          <span class="pill ok hidden" id="ready-pill">Ready</span>
+        </div>
+        <div class="row">
+          <button class="btn primary big" id="btn-play" disabled>Play</button>
+          <button class="btn ghost hidden" id="btn-kill">Close game</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-mods" class="view hidden">
+      <div class="hero">
+        <h1>Mods <span class="accent">from Modrinth</span></h1>
+        <p>One click installs straight into your mods folder (Forge 1.8.9 builds only).</p>
+      </div>
+      <div class="card">
+        <div class="row" style="margin-top:0">
+          <input type="text" id="mods-query" placeholder="Search mods…" style="flex:1;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text)" />
+          <button class="btn primary" id="mods-search">Search</button>
+        </div>
+        <div class="logline" id="mods-status">Type something and hit Search.</div>
+        <div id="mods-results" style="margin-top:12px;display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+    </section>
+
+    <section id="view-settings" class="view hidden">
+      <div class="card">
+        <div class="card-head"><h2>Memory</h2></div>
+        <p class="muted">Automatic allocation is recommended. Current auto value: <span id="mem-auto">–</span> MB</p>
+        <div class="row">
+          <label class="switch-row"><input type="checkbox" id="mem-auto-cb" checked /> Automatic</label>
+          <input type="number" id="mem-manual" min="1024" max="16384" step="512" disabled />
+          <span class="muted">MB</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Download source</h2></div>
+        <p class="muted">Auto speed-tests official Mojang servers against the BMCLAPI mirror and uses the fastest.</p>
+        <div class="row">
+          <select id="mirror-select">
+            <option value="auto">Auto (speed test)</option>
+            <option value="official">Official only</option>
+            <option value="mirror">Mirror only</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>About</h2></div>
+        <p class="muted">PixLauncher 0.1.0 — game directory lives next to the launcher, isolated from your system .minecraft. No telemetry is collected.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

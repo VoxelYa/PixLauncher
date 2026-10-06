@@ -1,0 +1,23 @@
+{
+  "required": true,
+  "minVersion": "0.7",
+  "package": "top.pixlauncher.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "mixins": [
+    "MinecraftMixin",
+    "GuiIngameForgeMixin",
+    "EntityRendererMixin",
+    "PlayerControllerMPMixin",
+    "GuiNewChatMixin",
+    "WorldMixin",
+    "EffectRendererMixin",
+    "EntityLivingBaseMixin",
+    "RendererLivingEntityMixin",
+    "ItemRendererMixin",
+    "GuiScreenMixin",
+    "RenderManagerMixin",
+    "TileEntityRendererDispatcherMixin"
+  ],
+  "client": [],
+  "injectors": { "defaultRequire": 0 }
+}

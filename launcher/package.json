@@ -1,0 +1,31 @@
+{
+  "name": "pixlauncher",
+  "productName": "PixLauncher",
+  "version": "0.1.0",
+  "description": "PixLauncher — Minecraft 1.8.9 Forge PvP launcher",
+  "main": "dist/main/index.js",
+  "author": "PixLauncher",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "dev": "npm run build && electron . --dev",
+    "dist": "npm run build && electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.0"
+  },
+  "build": {
+    "appId": "top.pixlauncher.launcher",
+    "productName": "PixLauncher",
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "package.json"],
+    "win": { "target": ["portable", "nsis"], "artifactName": "PixLauncher-${version}.${ext}" }
+  }
+}
